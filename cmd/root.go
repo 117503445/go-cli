@@ -7,7 +7,25 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var cfgFile string
+type config struct {
+	FieldStr1   string
+	FieldNested struct {
+		FieldStr2 string
+	}
+	FieldSlice []string
+}
+
+var cfg = config{
+	FieldStr1: "default FieldStr1",
+	FieldNested: struct {
+		FieldStr2 string
+	}{
+		FieldStr2: "default FieldStr2",
+	},
+	FieldSlice: []string{"default FieldSlice3", "default FieldSlice4"},
+}
+
+var cfgFile = "config.toml"
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{

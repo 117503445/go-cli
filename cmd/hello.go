@@ -1,12 +1,11 @@
 /*
 Copyright © 2024 NAME HERE <EMAIL ADDRESS>
-
 */
 package cmd
 
 import (
-	"github.com/spf13/cobra"
 	"github.com/rs/zerolog/log"
+	"github.com/spf13/cobra"
 )
 
 // helloCmd represents the hello command
@@ -22,6 +21,7 @@ to quickly create a Cobra application.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		log.Debug().Msg("hello called")
 		log.Debug().Str("cfgFile", cfgFile).Msg("")
+		log.Debug().Interface("cfg", cfg).Msg("")
 	},
 }
 
