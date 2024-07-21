@@ -1,0 +1,13 @@
+services:
+  go-cli-dev:
+    build:
+      context: ./
+      dockerfile: Dockerfile.dev
+    volumes:
+        - ./:/workspace
+        - go-cli-dev-vsc:/root/.vscode-server
+    stdin_open: true
+    tty: true
+
+volumes:
+  go-cli-dev-vsc:
