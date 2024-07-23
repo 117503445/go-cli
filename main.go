@@ -47,6 +47,16 @@ func pathIsFile(path string) bool {
 
 // config 是指针
 func loadConfig(config interface{}) {
+
+	// Use the POSIX compliant pflag lib instead of Go's flag lib.
+	f := flag.NewFlagSet("config", flag.ContinueOnError)
+	f.Usage = func() {
+		fmt.Print(f.FlagUsages())
+		os.Exit(0)
+	}
+	// Path to one or more config files to load into koanf along with some config params.
+	f.StringSlice("config", []string{DEFAULT_CONFIG}, "path to one or more .toml config files")
+
 	v := reflect.ValueOf(config)
 	if v.Kind() == reflect.Ptr {
 		v = v.Elem()
@@ -55,12 +65,23 @@ func loadConfig(config interface{}) {
 	}
 
 	// 读取 结构体字段 标签
-	t := reflect.TypeOf(v)
+	t := v.Type()
 	log.Debug().Str("configType", t.String()).Msg("configType")
 
 	for i := 0; i < t.NumField(); i++ {
 		field := t.Field(i)
+		value := v.Field(i)
 		log.Debug().Str("field", field.Name).Str("type", field.Type.String()).Msg("field")
+		switch field.Type.Kind() {
+		case reflect.String:
+			f.String(field.Tag.Get("koanf"), value.String(), field.Tag.Get("usage"))
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			f.Int64(field.Tag.Get("koanf"), value.Int(), field.Tag.Get("usage"))
+		case reflect.Bool:
+			f.Bool(field.Tag.Get("koanf"), value.Bool(), field.Tag.Get("usage"))
+		case reflect.Float64, reflect.Float32:
+			f.Float64(field.Tag.Get("koanf"), value.Float(), field.Tag.Get("usage"))
+		}
 	}
 
 	// koanf instance. Use "." as the key path delimiter. This can be "/" or any character.
@@ -89,15 +110,6 @@ func loadConfig(config interface{}) {
 	} else {
 		log.Debug().Interface("config", k.All()).Msg("loading env vars")
 	}
-
-	// Use the POSIX compliant pflag lib instead of Go's flag lib.
-	f := flag.NewFlagSet("config", flag.ContinueOnError)
-	f.Usage = func() {
-		fmt.Print(f.FlagUsages())
-		os.Exit(0)
-	}
-	// Path to one or more config files to load into koanf along with some config params.
-	f.StringSlice("config", []string{DEFAULT_CONFIG}, "path to one or more .toml config files")
 
 	f.Parse(os.Args[1:])
 
