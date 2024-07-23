@@ -2,42 +2,153 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"os"
+	"path"
+	"strings"
 
+	"github.com/117503445/goutils"
 	"github.com/knadh/koanf/v2"
-	"github.com/knadh/koanf/parsers/toml"
+	"github.com/rs/zerolog/log"
 
-	// TOML version 2 is available at:
-	// "github.com/knadh/koanf/parsers/toml/v2"
+	// "github.com/knadh/koanf/parsers/toml"
 
+	"github.com/knadh/koanf/parsers/toml/v2"
+
+	"github.com/knadh/koanf/providers/env"
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/providers/posflag"
+	"github.com/knadh/koanf/providers/structs"
 	flag "github.com/spf13/pflag"
 )
 
-// Global koanf instance. Use "." as the key path delimiter. This can be "/" or any character.
-var k = koanf.New(".")
+type Config struct {
+	Name string `koanf:"name"`
+	Age  int    `koanf:"age"`
+}
+
+var config *Config
+
+const DEFAULT_CONFIG = "config.toml"
+
+func pathIsFile(path string) bool {
+	fileInfo, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+
+	if fileInfo.IsDir() {
+		log.Warn().Str("path", path).Msg("is a directory")
+		return false
+	}
+
+	return true
+}
 
 func main() {
+
+	goutils.InitZeroLog()
+
+	config = &Config{
+		Name: "default-name",
+		Age:  18,
+	}
+
+	// koanf instance. Use "." as the key path delimiter. This can be "/" or any character.
+	var k = koanf.New(".")
+
+	if err := k.Load(structs.Provider(config, "koanf"), nil); err != nil {
+		log.Fatal().Err(err).Msg("error loading default config")
+	} else {
+		log.Debug().Interface("config", k.All()).Msg("loading default config")
+	}
+
+	// Load environment variables.
+	if err := k.Load(env.Provider("", ".", func(s string) string {
+		allow := []string{"NAME", "AGE", "CONFIG"} // TODO: read from struct tags
+		for _, a := range allow {
+			if s == a {
+				if s == "CONFIG" {
+					return "config"
+				}
+				return s
+			}
+		}
+		return ""
+	}), nil); err != nil {
+		log.Fatal().Err(err).Msg("error loading env vars")
+	} else {
+		log.Debug().Interface("config", k.All()).Msg("loading env vars")
+	}
+
 	// Use the POSIX compliant pflag lib instead of Go's flag lib.
 	f := flag.NewFlagSet("config", flag.ContinueOnError)
 	f.Usage = func() {
-		fmt.Println(f.FlagUsages())
+		fmt.Print(f.FlagUsages())
 		os.Exit(0)
 	}
 	// Path to one or more config files to load into koanf along with some config params.
-	f.StringSlice("conf", []string{"mock/mock.toml"}, "path to one or more .toml config files")
+	f.StringSlice("config", []string{DEFAULT_CONFIG}, "path to one or more .toml config files")
 	f.String("time", "2020-01-01", "a time string")
 	f.String("type", "xxx", "type of the app")
 	f.Parse(os.Args[1:])
 
 	// Load the config files provided in the commandline.
-	cFiles, _ := f.GetStringSlice("conf")
-	for _, c := range cFiles {
-		if err := k.Load(file.Provider(c), toml.Parser()); err != nil {
-			log.Fatalf("error loading file: %v", err)
+	cFiles, err := f.GetStringSlice("config")
+	if err != nil {
+		log.Fatal().Err(err).Msg("error getting config files")
+	}
+
+	cFilesWithCli := false
+	for _, arg := range os.Args {
+		if arg == "--config" {
+			cFilesWithCli = true
+			break
 		}
+	}
+	if !cFilesWithCli {
+		if k.Get("config") != nil {
+			cFiles = strings.Split(k.String("config"), ",")
+			log.Debug().Strs("config", cFiles).Msg("config files from env")
+		} else {
+			log.Debug().Strs("config", cFiles).Msg("config files from default")
+		}
+	}
+
+	for _, c := range cFiles {
+
+		if !path.IsAbs(c) {
+			if workingDirectory, err := os.Getwd(); err == nil {
+				if pathIsFile(path.Join(workingDirectory, c)) {
+					c = path.Join(workingDirectory, c)
+				}
+			} else {
+				log.Warn().Err(err).Str("path", c).Msg("error getting working directory")
+			}
+
+			if executablePath, err := os.Executable(); err == nil {
+				if pathIsFile(path.Join(path.Dir(executablePath), c)) {
+					c = path.Join(path.Dir(executablePath), c)
+				}
+			} else {
+				log.Warn().Err(err).Str("path", c).Msg("error getting executable path")
+			}
+		}
+
+		if !pathIsFile(c) {
+			if c == DEFAULT_CONFIG {
+				log.Info().Str("file", c).Msg("config file not found")
+			} else {
+				log.Warn().Str("file", c).Msg("config file not found")
+			}
+			continue
+		}
+
+		if err := k.Load(file.Provider(c), toml.Parser()); err != nil {
+			log.Fatal().Err(err).Str("file", c).Msg("error loading file")
+		} else {
+			log.Debug().Str("file", c).Interface("config", k.All()).Msg("loading config file")
+		}
+
 	}
 
 	// "time" and "type" may have been loaded from the config file, but
@@ -47,8 +158,13 @@ func main() {
 	// line flag values that are not present in conf maps from previously loaded
 	// providers.
 	if err := k.Load(posflag.Provider(f, ".", k), nil); err != nil {
-		log.Fatalf("error loading config: %v", err)
+		log.Fatal().Err(err).Msg("error loading config from cli")
 	}
 
-	fmt.Println("time is = ", k.String("time"))
+	// Unmarshal the loaded config into the conf struct.
+	if err := k.Unmarshal("", config); err != nil {
+		log.Fatal().Err(err).Msg("error unmarshaling config")
+	}
+
+	log.Info().Interface("config", config).Msg("config loaded")
 }
