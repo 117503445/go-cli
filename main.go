@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"reflect"
 	"strings"
 
 	"github.com/117503445/goutils"
@@ -44,13 +45,22 @@ func pathIsFile(path string) bool {
 	return true
 }
 
-func main() {
+// config 是指针
+func loadConfig(config interface{}) {
+	v := reflect.ValueOf(config)
+	if v.Kind() == reflect.Ptr {
+		v = v.Elem()
+	} else {
+		log.Fatal().Msg("config must be a pointer")
+	}
 
-	goutils.InitZeroLog()
+	// 读取 结构体字段 标签
+	t := reflect.TypeOf(v)
+	log.Debug().Str("configType", t.String()).Msg("configType")
 
-	config = &Config{
-		Name: "default-name",
-		Age:  18,
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		log.Debug().Str("field", field.Name).Str("type", field.Type.String()).Msg("field")
 	}
 
 	// koanf instance. Use "." as the key path delimiter. This can be "/" or any character.
@@ -88,8 +98,7 @@ func main() {
 	}
 	// Path to one or more config files to load into koanf along with some config params.
 	f.StringSlice("config", []string{DEFAULT_CONFIG}, "path to one or more .toml config files")
-	f.String("time", "2020-01-01", "a time string")
-	f.String("type", "xxx", "type of the app")
+
 	f.Parse(os.Args[1:])
 
 	// Load the config files provided in the commandline.
@@ -165,6 +174,19 @@ func main() {
 	if err := k.Unmarshal("", config); err != nil {
 		log.Fatal().Err(err).Msg("error unmarshaling config")
 	}
+}
+
+func main() {
+
+	goutils.InitZeroLog()
+
+	config = &Config{
+		Name: "default-name",
+		Age:  18,
+	}
+
+	loadConfig(config)
 
 	log.Info().Interface("config", config).Msg("config loaded")
+
 }
