@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/alecthomas/kong"
 	kongtoml "github.com/alecthomas/kong-toml"
@@ -36,7 +37,8 @@ type DefaultCmd struct {
 }
 
 func (d *DefaultCmd) Run(ctx *Context) error {
-	fmt.Println("default, debug:", ctx.Debug, cli.Name)
+	// fmt.Println("default, debug:", ctx.Debug, cli.Name)
+	fmt.Println(cli.Name)
 	return nil
 }
 
@@ -45,7 +47,7 @@ var cli struct {
 
 	Name string `help:"Name of the user." env:"NAME"`
 
-	Config []string `short:"c" help:"Config files." type:"path" default:""`
+	Config []string `short:"c" help:"Config files." type:"path" default:"config.toml" env:"CONFIG"`
 
 	Rm         RmCmd      `cmd:"" help:"Remove files."`
 	Ls         LsCmd      `cmd:"" help:"List paths."`
@@ -53,7 +55,9 @@ var cli struct {
 }
 
 func main() {
-	ctx := kong.Parse(&cli, kong.Configuration(kongtoml.Loader, "config.toml"))
+	kong.Parse(&cli)
+	log.Printf("config: %v", cli.Config)
+	ctx := kong.Parse(&cli, kong.Configuration(kongtoml.Loader, cli.Config...))
 	// ctx := kong.Parse(&cli)
 	// Call the Run() method of the selected parsed command.
 	err := ctx.Run(&Context{Debug: cli.Debug})
