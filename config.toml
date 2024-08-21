@@ -1,1 +1,2 @@
-name = "name1"
+# name = "name1"
+debug = false

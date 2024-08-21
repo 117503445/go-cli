@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/alecthomas/kong"
+	kongtoml "github.com/alecthomas/kong-toml"
 )
 
 type Context struct {
@@ -31,16 +32,32 @@ func (l *LsCmd) Run(ctx *Context) error {
 	return nil
 }
 
-var cli struct {
-	Debug bool `help:"Enable debug mode."`
+type DefaultCmd struct {
+}
 
-	Rm RmCmd `cmd:"" help:"Remove files."`
-	Ls LsCmd `cmd:"" help:"List paths."`
+func (d *DefaultCmd) Run(ctx *Context) error {
+	fmt.Println("default, debug:", ctx.Debug, cli.Name)
+	return nil
+}
+
+var cli struct {
+	Debug bool `help:"Enable debug mode." env:"DEBUG"`
+
+	Name string `help:"Name of the user." env:"NAME"`
+
+	Config []string `short:"c" help:"Config files." type:"path" default:""`
+
+	Rm         RmCmd      `cmd:"" help:"Remove files."`
+	Ls         LsCmd      `cmd:"" help:"List paths."`
+	DefaultCmd DefaultCmd `cmd:"" hidden:"" default:"1"`
 }
 
 func main() {
-	ctx := kong.Parse(&cli)
+	ctx := kong.Parse(&cli, kong.Configuration(kongtoml.Loader, "config.toml"))
+	// ctx := kong.Parse(&cli)
 	// Call the Run() method of the selected parsed command.
 	err := ctx.Run(&Context{Debug: cli.Debug})
 	ctx.FatalIfErrorf(err)
 }
+
+// 默认 cmd
